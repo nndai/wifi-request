@@ -385,5 +385,5 @@ if __name__ == "__main__":
     add_to_startup_folder()
     root.mainloop()
 
-    #python -m PyInstaller --onefile --windowed --icon=app1.ico source_request.py
+
     #python -m PyInstaller source_request.spec
