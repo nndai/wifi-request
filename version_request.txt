@@ -18,10 +18,10 @@ VSVersionInfo(
         [
          StringStruct(u'FileVersion', u'v1.4'),
          StringStruct(u'ProductVersion', u'v1.4'),
-         StringStruct(u'CompanyName', u'nnd'),
+         StringStruct(u'CompanyName', u'https://github.com/nndai'),
          StringStruct(u'ProductName', u'Request'),
          StringStruct(u'FileDescription', u'request'),
-         StringStruct(u'LegalCopyright', u'Unknown'),
+         StringStruct(u'LegalCopyright', u'https://github.com/nndai'),
          StringStruct(u'OriginalFilename', u'request.exe'),
          StringStruct(u'AuthorName', u'Nguyen Ngoc Dai'),
          StringStruct(u'ReleaseDate', u'2025-04-08'),
