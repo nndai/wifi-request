@@ -36,9 +36,10 @@ class MyApp:
         self.tray_thread = Thread(target=self.create_tray_icon)
         self.tray_thread.start()
 
+        self.start_app = True
         self.running = True
-        self.thread = Thread(target=self.run_background)
-        self.thread.start()
+        self.run_thread = Thread(target=self.run_background)
+        self.run_thread.start()
 
 
 
@@ -121,7 +122,6 @@ class MyApp:
         
         
     def login_by_button(self):
-        self.running = False
         current_time = time.time()
         if current_time - self.last_click_time < 1:
             self.running = True
@@ -133,23 +133,24 @@ class MyApp:
         Thread(target=self.login).start()
         self.current_times_request = self.max_times_request
         self.current_times_error = 0
-        self.wait = 0
+        self.wait = 1
         self.running = True
+        
 
     def run_background(self):
         self.current_times_request = self.max_times_request
         self.current_times_error = 0
         self.time = None
-        self.start_app = True
         self.wait = 0.0
 
         while self.start_app:
-            if self.running:
-                if self.wait > 0:
-                    self.wait -= 0.1
-                    time.sleep(0.1)
-                    continue
+            
+            if self.wait > 0:
+                self.wait -= 0.2
+                time.sleep(0.2)
+                continue
                 
+            if self.running:
                 if self.current_times_request >= self.max_times_request:
                     if self.login():
                         self.time = time.strftime("%H:%M")
@@ -169,7 +170,7 @@ class MyApp:
                         self.info_label.configure(text=f"Count: {self.current_times_error}/{int(90/self.request_interval)}")
 
                         # print('request false')
-                        time.sleep(self.request_interval)
+                        self.wait = self.request_interval
                         continue
 
                 if not self.check_internet():
@@ -182,6 +183,7 @@ class MyApp:
                 self.current_times_request += 1
                 self.status_label.configure(text="Status: Running", text_color = "green")
                 self.info_label.configure(text=f"Time: {self.time}\nCount: {self.current_times_request}/{self.max_times_request}")
+            
             
             self.wait = self.request_interval
 
@@ -288,10 +290,9 @@ class MyApp:
         self.root.withdraw()
     def end_app(self):
         self.on_closing()
-        self.start_app = False
-        self.wait = 0
         self.Qapp.quit()
-        self.thread.join()
+        self.start_app = False
+        self.run_thread.join()
         self.root.quit()
         
 
@@ -375,6 +376,7 @@ def check_single_instance():
     ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\RequestAppMutex")
     if ctypes.GetLastError() == 183:
         sys.exit(0)
+
 
 if __name__ == "__main__":
     check_single_instance()
