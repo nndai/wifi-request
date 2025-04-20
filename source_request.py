@@ -197,10 +197,14 @@ class MyApp:
             
             self.ip_label.configure(text = ip)
 
-            requests.get(f'http://{ip}/logout?', timeout = 2)
-            requests.post(f'http://{ip}/login', data = {'username': 'awing15-15', 'password': 'Awing15-15@2023'}, timeout = 2)
+            req = requests.get(f'http://{ip}/logout?', timeout = 2, allow_redirects=False)
+            #print(req.text)
+            req = requests.post(f'http://{ip}/login', data = {'username': 'awing15-15', 'password': 'Awing15-15@2023'}, timeout = 2, allow_redirects=False)
+            #print(req.text)
+            
             return True
         except requests.RequestException as e:
+            #print(e)
             return False
 
     def check_internet(self):
