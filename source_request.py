@@ -21,13 +21,18 @@ from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QAction, QMenu
 class MyApp:
     def __init__(self, root):
         
+        self.version = '1.4.2'
+        
         self.root = root
         
-        self.request_interval = 5     #The time between two requests
-        self.max_times_request = 120  #Number of requests between two logins, each login is 10 minutes apart(600s)
+        self.request_interval = 5       #The time between two requests
+        self.max_times_request = 120    #Number of requests between two logins, each login is 10 minutes apart(600s)
+        self.relogin_time = 5 * 60      #(s)
         self.last_click_time = 0
+        self.never_time = 60 * 60 * 24 * 7  #~7w
 
-        self.key_interval = "interval"
+        self.key_request_interval = "rq_itv"
+        self.key_relogin_interval = "rl_tm"
 
         self.load_data()
         self.init_window()
@@ -90,24 +95,47 @@ class MyApp:
             self.ip_frame,
             width=131, height=13, 
             font=("JetBrains Mono", 14, "bold"), 
-            anchor="nw",
-            text="000.000.000.000",
+            anchor="center",
+            text="0.0.0.0",
         )
         self.ip_label.grid(row=0, column=0, padx=7,pady=5, sticky="w")
         
 
         self.interval_menu = ctk.CTkOptionMenu(
             self.control_frame,
-            width = 146,
+            width = 71,
             values = ["1s", "2s", "3s", "5s","7s","10s","15s"],
             variable = ctk.StringVar(value = str(self.request_interval) + 's'),
+            anchor = "center",
             command = self.change_request_interval,
             font = ("JetBrains Mono", 14,"bold"),
             dropdown_text_color = "#ffffff",
             dropdown_fg_color = "#004275",
             dropdown_hover_color = "#002642",
+            text_info= "Interval time",
+            dropdown_font= ("JetBrains Mono", 11,"bold"),
+            fg_text_info_color = "#203a4f",
         )
         self.interval_menu.grid(row=1, column=0, padx=7,pady=4, sticky="w")
+        
+        self.interval_relogin_menu = ctk.CTkOptionMenu(
+            self.control_frame,
+            width = 71,
+            values = ["1m", "5m", "nv"],
+            variable = ctk.StringVar(value = 'nv' if self.relogin_time == self.never_time 
+                                     else str(int(self.relogin_time / 60)) + 'm'),
+            anchor = "center",
+            command = self.change_relogin_time,
+            font = ("JetBrains Mono", 14,"bold"),
+            dropdown_text_color = "#ffffff",
+            dropdown_fg_color = "#004275",
+            dropdown_hover_color = "#002642",
+            text_info= "Relogin time",
+            dropdown_font= ("JetBrains Mono", 11,"bold"),
+            fg_text_info_color = "#203a4f",
+            
+        )
+        self.interval_relogin_menu.grid(row=1, column=0, padx=82,pady=4, sticky="w")
         
 
         self.button = ctk.CTkButton(
@@ -146,8 +174,8 @@ class MyApp:
         while self.start_app:
             
             if self.wait > 0:
-                self.wait -= 0.2
-                time.sleep(0.2)
+                self.wait -= 0.5
+                time.sleep(0.5)
                 continue
                 
             if self.running:
@@ -158,7 +186,7 @@ class MyApp:
                         self.current_times_error = 0
                         # print('request true')
                     else:
-                        if self.current_times_error >= int(90/self.request_interval):
+                        if self.current_times_error >= int(self.relogin_time/self.request_interval):
                             self.running = False
                             self.status_label.configure(text="Status: Pause", text_color = "yellow")
                             self.info_label.configure(text=f"Time: {time.strftime('%H:%M')}")
@@ -167,7 +195,10 @@ class MyApp:
 
                         self.current_times_error += 1
                         self.status_label.configure(text="Status: Error", text_color = "red")
-                        self.info_label.configure(text=f"Count: {self.current_times_error}/{int(90/self.request_interval)}")
+                        if self.relogin_time == self.never_time:
+                            self.info_label.configure(text=f"Count: {self.current_times_error}")
+                        else:
+                            self.info_label.configure(text=f"Count: {self.current_times_error}/{int(self.relogin_time/self.request_interval)}")
 
                         # print('request false')
                         self.wait = self.request_interval
@@ -196,7 +227,7 @@ class MyApp:
                 return False
             
             self.ip_label.configure(text = ip)
-
+            
             req = requests.get(f'http://{ip}/logout?', timeout = 2, allow_redirects=False)
             #print(req.text)
             req = requests.post(f'http://{ip}/login', data = {'username': 'awing15-15', 'password': 'Awing15-15@2023'}, timeout = 2, allow_redirects=False)
@@ -232,7 +263,7 @@ class MyApp:
     def create_tray_icon(self):
         self.Qapp = QApplication(sys.argv)
         self.tray_icon = QSystemTrayIcon(QIcon(self.get_qicon_from_base64(image_base64.APP_ICON_BASE64)))
-        self.tray_icon.setToolTip("Request")
+        self.tray_icon.setToolTip("Request " + self.version)
 
         self.menu = QMenu()
         self.show_action = QAction(QIcon(self.get_qicon_from_base64(image_base64.SHOW_IMAGE_BASE64)), 'Show')
@@ -298,6 +329,7 @@ class MyApp:
         self.start_app = False
         self.run_thread.join()
         self.root.quit()
+        sys.exit(0)
         
 
     def change_request_interval(self, value):
@@ -309,16 +341,32 @@ class MyApp:
         self.current_times_request = self.max_times_request
         self.current_times_error = 0
         self.wait = 0
-        self.save_winreg_variables(self.key_interval, value)
+        self.save_winreg_variables(self.key_request_interval, value)
+        
+    def change_relogin_time(self, value):
+        if value == 'nv':
+            value = self.never_time
+        else:
+            value = 60 * int(value[:-1]) #omit the 'm' symbol
+        if self.relogin_time == value:
+            return
+        self.relogin_time = value
+        self.current_times_request = self.max_times_request
+        self.current_times_error = 0
+        self.wait = 0
+        self.save_winreg_variables(self.key_relogin_interval, value)
 
 
     def load_data(self):
-        request_interval = self.get_winreg_variables(self.key_interval)
-        if request_interval is None:
-            return
-        self.request_interval = request_interval
-        self.max_times_request = int(600 / self.request_interval)
-
+        request_interval = self.get_winreg_variables(self.key_request_interval)
+        if request_interval != None:
+            self.request_interval = request_interval
+            self.max_times_request = int(600 / request_interval)
+        
+        relogin_time = self.get_winreg_variables(self.key_relogin_interval)
+        if relogin_time != None:
+            self.relogin_time = relogin_time
+        
 
     def save_winreg_variables(self, name, value):
         key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\Request")
@@ -336,6 +384,7 @@ class MyApp:
             return value
         except FileNotFoundError:
             return None
+    
     
     def get_qicon_from_base64(self, data_base64):
         image_data = base64.b64decode(data_base64)
