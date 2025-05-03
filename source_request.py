@@ -135,7 +135,7 @@ class MyApp:
             fg_text_info_color = "#203a4f",
             
         )
-        self.interval_relogin_menu.grid(row=1, column=0, padx=82,pady=4, sticky="w")
+        self.interval_relogin_menu.grid(row=1, column=0, padx=(0, 7), sticky="e")
         
 
         self.button = ctk.CTkButton(
