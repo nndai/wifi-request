@@ -180,8 +180,10 @@ class MyApp:
                 continue
                 
             if self.running:
+                is_login = False
                 if self.current_times_request >= self.max_times_request:
                     if self.login():
+                        is_login = True
                         self.time = time.strftime("%H:%M")
                         self.current_times_request = 0
                         self.current_times_error = 0
@@ -206,6 +208,9 @@ class MyApp:
                         continue
 
                 if not self.check_internet():
+                    if is_login:
+                        self.status_label.configure(text="Status: Error", text_color = "red")
+                        time.sleep(2)
                     self.current_times_request = self.max_times_request
                     # print('check_internet false')
                     continue
