@@ -22,7 +22,7 @@ from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QAction, QMenu
 class MyApp:
     def __init__(self, root):
         
-        self.version = '1.4.2'
+        self.version = '1.5'
         
         self.root = root
         
