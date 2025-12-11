@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import base64
@@ -229,13 +230,93 @@ class MyApp:
             self.ip_label.configure(text = ip)
             
             req = requests.get(f'http://{ip}/logout?', timeout = 2, allow_redirects=False)
-            #print(req.text)
-            req = requests.post(f'http://{ip}/login', data = {'username': 'awing15-15', 'password': 'Awing15-15@2023'}, timeout = 2, allow_redirects=False)
-            #print(req.text)
+            print("Logout:\n" + req.text + " " + str(req.status_code))
             
-            return True
         except requests.RequestException as e:
-            #print(e)
+            print(f"Logout Request Exception: {e}")
+            return False
+        except Exception as e:
+            print(f"Logout Exception: {e}")
+            return False
+        
+        time.sleep(0.5)
+        
+        session = requests.Session()
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Content-Type': 'application/x-www-form-urlencoded'
+        }
+        gateway_url = "http://authen.awingconnect.vn/login"
+        
+        dummy_data = {
+            'username': "awing15-15",
+            'password': "6326e1c1739d4dabed8e2f8f4d7eb409",
+            'dst': 'http://v1.awingconnect.vn/Success',
+            'popup': 'false'
+        }
+
+        try:
+            resp_dummy = session.post(gateway_url, data=dummy_data, headers=headers, timeout = 2)
+            match = re.search(r'url=([^"]+)', resp_dummy.text)
+            
+            if not match:
+                print("[-] Không tìm thấy URL Redirect.")
+                return False
+
+            redirect_url = match.group(1)
+            print(redirect_url)
+
+        except Exception as e:
+            print(f"[-] Lỗi kết nối Router: {e}")
+            return False
+        
+        verify_url = "http://v1.awingconnect.vn/Home/VerifyUrl"
+        
+        session.headers.update({
+            'Referer': redirect_url,
+            'X-Requested-With': 'XMLHttpRequest',
+            'Content-Type': 'application/json'
+        })
+
+        try:
+            resp_verify = session.post(verify_url, timeout = 2)
+            print(resp_verify.text)
+            
+            data = None
+            try:
+                data = resp_verify.json()
+            except Exception as e:
+                print(f"JSON Decode Exception: {e}")
+                return False
+
+            html_form = data['captiveContext']['contentAuthenForm']
+            real_action_url = re.search(r'action="([^"]+)"', html_form).group(1)
+            real_user = re.search(r'name="username" value="([^"]+)"', html_form).group(1)
+            real_pass = re.search(r'name="password" value="([^"]+)"', html_form).group(1)
+            
+            print(f"User: {real_user}")
+            print(f"Pass: {real_pass}")
+            print(f"Action: {real_action_url}")
+
+            final_payload = {
+                'username': real_user,
+                'password': real_pass,
+                'dst': 'http://v1.awingconnect.vn/Success',
+                'popup': 'false'
+            }
+
+            session.headers.update({'Content-Type': 'application/x-www-form-urlencoded'})
+            final_resp = session.post(real_action_url, data=final_payload, timeout = 2)
+            
+            if final_resp.status_code == 200 or final_resp.status_code == 302:
+                print("[SUCCESS] Đã đăng nhập thành công!")
+                return True
+            
+            print(f"[FAIL] Server phản hồi: {final_resp.status_code}")
+            return False
+
+        except Exception as e:
+            print(f"Login Exception: {e}")
             return False
 
     def check_internet(self):
@@ -249,8 +330,7 @@ class MyApp:
 
         if 'time' in result:
             return True
-        else:
-            return False
+        return False
 
     def get_router_ip(self):
         router_ip = ''
@@ -442,3 +522,14 @@ if __name__ == "__main__":
 
 
     #python -m PyInstaller source_request.spec
+
+###custom for dropdown_menu.py:105###
+# if self._text_info != None:
+#     self.add_command(
+#         label=self._text_info.ljust(self._min_character_width),
+#         command=None,
+#         foreground=self._apply_appearance_mode(self._text_color),
+#         background=self._apply_appearance_mode(self._fg_text_info_color),
+#         activebackground=self._apply_appearance_mode(self._fg_text_info_color),
+#         activeforeground=self._apply_appearance_mode(self._text_color)
+#     )
