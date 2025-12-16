@@ -171,6 +171,11 @@ class MyApp:
         self.current_times_error = 0
         self.time = None
         self.wait = 0.0
+        
+        def login_success():
+            self.current_times_request += 1
+            self.status_label.configure(text="Status: Running", text_color = "green")
+            self.info_label.configure(text=f"Time: {self.time}\nCount: {self.current_times_request}/{self.max_times_request}")
 
         while self.start_app:
             
@@ -180,10 +185,10 @@ class MyApp:
                 continue
                 
             if self.running:
-                is_login = False
+                is_login_success = False
                 if self.current_times_request >= self.max_times_request:
                     if self.login():
-                        is_login = True
+                        is_login_success = True
                         self.time = time.strftime("%H:%M")
                         self.current_times_request = 0
                         self.current_times_error = 0
@@ -208,19 +213,32 @@ class MyApp:
                         continue
 
                 if not self.check_internet():
-                    if is_login:
+                    if is_login_success:
                         self.status_label.configure(text="Status: Error", text_color = "red")
-                        time.sleep(2)
+                        self.info_label.configure(text="Login success but\nno internet!\nChecking...")
+                        time.sleep(3)
+                        
+                        attempt = 0
+                        max_attempts = 15
+                        while not self.check_internet() and attempt < max_attempts:
+                            self.info_label.configure(text="Login success but\nno internet!\nChecking...\nAttempt: " + str(attempt + 1) + "/" + str(max_attempts))
+                            time.sleep(0.2)
+                            attempt += 1
+                            
+                        if self.check_internet():
+                            login_success()
+                            self.wait = self.request_interval
+                            continue
+                            
+                        self.status_label.configure(text="Status: Error", text_color = "red")
+                        self.info_label.configure(text="Login success but\nno internet!\nRe-login")
                     self.current_times_request = self.max_times_request
                     # print('check_internet false')
                     continue
                 # else:
                 # print('check_internet true')
 
-                self.current_times_request += 1
-                self.status_label.configure(text="Status: Running", text_color = "green")
-                self.info_label.configure(text=f"Time: {self.time}\nCount: {self.current_times_request}/{self.max_times_request}")
-            
+                login_success()
             
             self.wait = self.request_interval
 
@@ -278,6 +296,7 @@ class MyApp:
         verify_url = "http://v1.awingconnect.vn/Home/VerifyUrl"
         
         session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': redirect_url,
             'X-Requested-With': 'XMLHttpRequest',
             'Content-Type': 'application/json'
@@ -311,10 +330,12 @@ class MyApp:
             }
 
             session.headers.update({'Content-Type': 'application/x-www-form-urlencoded'})
-            final_resp = session.post(real_action_url, data=final_payload, timeout = 2)
             
+            print(session.headers.values())
+            final_resp = session.post(real_action_url, data=final_payload, timeout = 2)
+            print(final_resp.text)
             if final_resp.status_code == 200 or final_resp.status_code == 302:
-                print("[SUCCESS] Đã đăng nhập thành công!")
+                print("[SUCCESS] Đã đăng nhập thành công! :" + str(final_resp.status_code))
                 return True
             
             print(f"[FAIL] Server phản hồi: {final_resp.status_code}")
@@ -326,13 +347,14 @@ class MyApp:
 
     def check_internet(self):
         try:
-            result = subprocess.run(['ping', '-n', '1', '-l', '1', '203.162.4.191'],timeout = 3, 
+            result = subprocess.run(['ping', '-n', '1', '-l', '1', '203.162.4.191'],timeout = 1, 
                                     stdout = subprocess.PIPE,
                                     stderr = subprocess.PIPE, 
                                     creationflags = subprocess.CREATE_NO_WINDOW).stdout.decode('utf-8')
         except subprocess.TimeoutExpired:
+            print("Ping Timeout")
             return False
-
+        
         if 'time' in result:
             return True
         return False
