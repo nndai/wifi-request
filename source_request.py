@@ -5,6 +5,7 @@ import time
 import base64
 import ctypes
 import winreg
+import datetime
 import requests
 import netifaces
 import subprocess
@@ -168,22 +169,22 @@ class MyApp:
 
     def run_background(self):
         self.current_times_error = 0
-        self.time_login = time.time()
+        self.time_login = datetime.datetime.now()
         self.wait = 0.0
         self.is_internet = False
         
         self.display_ip()
         
-        def dispaly_login_info():
+        def display_login_info():
             self.status_label.configure(text="Status: Running", text_color = "green")
-            elapsed = int(time.time() - self.time_login)
-            self.info_label.configure(text = f"TimeLogin: {time.strftime('%H:%M')}\n"f"TimeUsage: {elapsed//60:02d}:{elapsed%60:02d}")
+            elapsed = int(time.time() - self.time_login.timestamp())
+            self.info_label.configure(text = f"TimeLogin: {self.time_login.strftime('%H:%M')}\n"f"TimeUsage: {elapsed//60:02d}:{elapsed%60:02d}")
 
         
         while self.start_app:
             if self.wait > 0:
                 if self.is_internet:
-                    dispaly_login_info()
+                    display_login_info()
                 self.wait -= 0.5
                 time.sleep(0.5)
                 continue
@@ -196,7 +197,7 @@ class MyApp:
                     if self.login():
                         # successful login
                         is_login_success = True
-                        self.time_login = time.time()
+                        self.time_login = datetime.datetime.now()
                         self.current_times_error = 0
                         
                     else:
