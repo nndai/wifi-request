@@ -167,33 +167,40 @@ class MyApp:
         
 
     def run_background(self):
-        self.current_times_request = self.max_times_request
         self.current_times_error = 0
-        self.time = None
+        self.time_login = time.time()
         self.wait = 0.0
+        self.is_internet = False
         
-        def login_success():
-            self.current_times_request += 1
+        self.display_ip()
+        
+        def dispaly_login_info():
             self.status_label.configure(text="Status: Running", text_color = "green")
-            self.info_label.configure(text=f"Time: {self.time}\nCount: {self.current_times_request}/{self.max_times_request}")
+            elapsed = int(time.time() - self.time_login)
+            self.info_label.configure(text = f"TimeLogin: {time.strftime('%H:%M')}\n"f"TimeUsage: {elapsed//60:02d}:{elapsed%60:02d}")
 
+        
         while self.start_app:
-            
             if self.wait > 0:
+                if self.is_internet:
+                    dispaly_login_info()
                 self.wait -= 0.5
                 time.sleep(0.5)
                 continue
                 
             if self.running:
                 is_login_success = False
-                if self.current_times_request >= self.max_times_request:
+                if not self.check_internet():
+                    self.is_internet = False
+                    
                     if self.login():
+                        # successful login
                         is_login_success = True
-                        self.time = time.strftime("%H:%M")
-                        self.current_times_request = 0
+                        self.time_login = time.time()
                         self.current_times_error = 0
-                        # print('request true')
+                        
                     else:
+                        # pause
                         if self.current_times_error >= int(self.relogin_time/self.request_interval):
                             self.running = False
                             self.status_label.configure(text="Status: Pause", text_color = "yellow")
@@ -201,6 +208,7 @@ class MyApp:
                             # print('running false')
                             continue
 
+                        # handle error
                         self.current_times_error += 1
                         self.status_label.configure(text="Status: Error", text_color = "red")
                         if self.relogin_time == self.never_time:
@@ -208,52 +216,48 @@ class MyApp:
                         else:
                             self.info_label.configure(text=f"Count: {self.current_times_error}/{int(self.relogin_time/self.request_interval)}")
 
-                        # print('request false')
+
                         self.wait = self.request_interval
                         continue
 
-                if not self.check_internet():
-                    if is_login_success:
-                        self.status_label.configure(text="Status: Error", text_color = "red")
-                        self.info_label.configure(text="Login success but\nno internet!\nChecking...")
-                        time.sleep(3)
-                        
-                        attempt = 0
-                        max_attempts = 15
-                        while not self.check_internet() and attempt < max_attempts:
-                            self.info_label.configure(text="Login success but\nno internet!\nChecking...\nAttempt: " + str(attempt + 1) + "/" + str(max_attempts))
-                            time.sleep(0.2)
-                            attempt += 1
+                    # check internet after login
+                    if not self.check_internet():
+                        if is_login_success:
+                            self.status_label.configure(text="Status: Error", text_color = "red")
+                            self.info_label.configure(text="Login success but\nno internet!\nChecking...")
+                            time.sleep(3)
                             
-                        if self.check_internet():
-                            login_success()
-                            self.wait = self.request_interval
-                            continue
+                            attempt = 0
+                            max_attempts = 15
+                            while not self.check_internet() and attempt < max_attempts:
+                                self.info_label.configure(text="Login success but\nno internet!\nChecking...\nAttempt: " + str(attempt + 1) + "/" + str(max_attempts))
+                                time.sleep(0.2)
+                                attempt += 1
+                                
+                            if self.check_internet():
+                                self.is_internet = True
+                                self.wait = self.request_interval
+                                continue
                             
-                        self.status_label.configure(text="Status: Error", text_color = "red")
-                        self.info_label.configure(text="Login success but\nno internet!\nRe-login")
-                    self.current_times_request = self.max_times_request
-                    # print('check_internet false')
-                    continue
-                # else:
-                # print('check_internet true')
+                            self.status_label.configure(text="Status: Error", text_color = "red")
+                            self.info_label.configure(text="Login success but\nno internet!\nRe-login")
+                        # print('check_internet false')
+                        continue
 
-                login_success()
+                self.is_internet = True
             
             self.wait = self.request_interval
 
 
     def login(self):
         try:
-            ip = self.get_router_ip()
+            ip = self.display_ip()
             if ip == '':
-                self.ip_label.configure(text = '0.0.0.0')
                 return False
             
-            self.ip_label.configure(text = ip)
-            
-            req = requests.get(f'http://{ip}/logout?', timeout = 2, allow_redirects=False)
-            print("Logout:\n" + req.text + " " + str(req.status_code))
+            # logout is deprecated
+            #req = requests.get(f'http://{ip}/logout?', timeout = 2, allow_redirects=False)
+            #print("Logout:\n" + req.text + " " + str(req.status_code))
             
         except requests.RequestException as e:
             print(f"Logout Request Exception: {e}")
@@ -262,14 +266,15 @@ class MyApp:
             print(f"Logout Exception: {e}")
             return False
         
-        time.sleep(0.5)
+        #time.sleep(0.5)
         
         session = requests.Session()
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Content-Type': 'application/x-www-form-urlencoded'
         }
-        gateway_url = "http://authen.awingconnect.vn/login"
+        
+        login_url = "http://156.156.157.29/login" # this ip address doesn't seem to be fixed
         
         dummy_data = {
             'username': "awing15-15",
@@ -279,37 +284,38 @@ class MyApp:
         }
 
         try:
-            resp_dummy = session.post(gateway_url, data=dummy_data, headers=headers, timeout = 2)
+            resp_dummy = session.post(login_url, data=dummy_data, headers=headers, timeout = 2)
             match = re.search(r'url=([^"]+)', resp_dummy.text)
             
             if not match:
-                print("[-] Không tìm thấy URL Redirect.")
+                print('\n' + resp_dummy.text)
+                print("---> Không tìm thấy URL Redirect.")
                 return False
 
             redirect_url = match.group(1)
-            print(redirect_url)
+            print('\n' + redirect_url)
 
         except Exception as e:
-            print(f"[-] Lỗi kết nối Router: {e}")
+            print(f"Lỗi kết nối Router: {e}")
             return False
         
         verify_url = "http://v1.awingconnect.vn/Home/VerifyUrl"
         
         session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': redirect_url,
             'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         })
 
         try:
             resp_verify = session.post(verify_url, timeout = 2)
-            print(resp_verify.text)
-            
+
             data = None
             try:
                 data = resp_verify.json()
             except Exception as e:
+                print('\n' + resp_verify.text)
                 print(f"JSON Decode Exception: {e}")
                 return False
 
@@ -330,14 +336,13 @@ class MyApp:
             }
 
             session.headers.update({'Content-Type': 'application/x-www-form-urlencoded'})
+            final_resp = session.post(login_url, data=final_payload, timeout = 2)
             
-            print(session.headers.values())
-            final_resp = session.post(real_action_url, data=final_payload, timeout = 2)
-            print(final_resp.text)
             if final_resp.status_code == 200 or final_resp.status_code == 302:
-                print("[SUCCESS] Đã đăng nhập thành công! :" + str(final_resp.status_code))
+                print("[SUCCESS] Đã đăng nhập thành công :" + str(final_resp.status_code))
                 return True
             
+            print('\n' + final_resp.text)
             print(f"[FAIL] Server phản hồi: {final_resp.status_code}")
             return False
 
@@ -358,6 +363,15 @@ class MyApp:
         if 'time' in result:
             return True
         return False
+    
+    def display_ip(self):
+        ip = self.get_router_ip()
+        if ip == '':
+            self.ip_label.configure(text = '0.0.0.0')
+            return ''
+        
+        self.ip_label.configure(text = ip)
+        return ip
 
     def get_router_ip(self):
         router_ip = ''
