@@ -6,12 +6,15 @@ import base64
 import ctypes
 import winreg
 import requests
+import datetime
 import netifaces
 import subprocess
 import image_base64
+import urllib.parse
 from PIL import ImageTk
 import customtkinter as ctk
 from threading import Thread
+from bs4 import BeautifulSoup
 from PyQt5.QtCore import QPoint
 from win32com.client import Dispatch
 from PyQt5.QtGui import QIcon, QCursor, QPixmap
@@ -26,14 +29,14 @@ class MyApp:
         
         self.root = root
         
-        self.request_interval = 5       #The time between two requests
-        self.max_times_request = 120    #Number of requests between two logins, each login is 10 minutes apart(600s)
-        self.relogin_time = 5 * 60      #(s)
+        self.internet_check_interval = 5        #(second), the time between two internet checks or login attempts
+        self.login_interval = 600               #(second), time between two logins
+        self.login_retry_duration = 5 * 60      #(second), max time to retry login if failed
         self.last_click_time = 0
-        self.never_time = 60 * 60 * 24 * 7  #~7w
+        self.never_time = 60 * 60 * 24 * 7      #~1week, never pause relogin
 
-        self.key_request_interval = "rq_itv"
-        self.key_relogin_interval = "rl_tm"
+        self.key_internet_check_interval = "internet_check_interval"
+        self.key_login_retry_duration = "login_retry_duration"
 
         self.load_data()
         self.init_window()
@@ -106,9 +109,9 @@ class MyApp:
             self.control_frame,
             width = 71,
             values = ["1s", "2s", "3s", "5s","7s","10s","15s"],
-            variable = ctk.StringVar(value = str(self.request_interval) + 's'),
+            variable = ctk.StringVar(value = str(self.internet_check_interval) + 's'),
             anchor = "center",
-            command = self.change_request_interval,
+            command = self.change_internet_check_interval,
             font = ("JetBrains Mono", 14,"bold"),
             dropdown_text_color = "#ffffff",
             dropdown_fg_color = "#004275",
@@ -123,10 +126,10 @@ class MyApp:
             self.control_frame,
             width = 71,
             values = ["1m", "5m", "nv"],
-            variable = ctk.StringVar(value = 'nv' if self.relogin_time == self.never_time 
-                                     else str(int(self.relogin_time / 60)) + 'm'),
+            variable = ctk.StringVar(value = 'nv' if self.login_retry_duration == self.never_time 
+                                     else str(int(self.login_retry_duration / 60)) + 'm'),
             anchor = "center",
-            command = self.change_relogin_time,
+            command = self.change_login_retry_duration,
             font = ("JetBrains Mono", 14,"bold"),
             dropdown_text_color = "#ffffff",
             dropdown_fg_color = "#004275",
@@ -159,65 +162,75 @@ class MyApp:
         self.last_click_time = current_time
         self.status_label.configure(text="Logging in......", text_color = "white")
         self.info_label.configure(text="")
-        Thread(target=self.login).start()
-        self.current_times_request = self.max_times_request
+        #Thread(target=self.login).start()
         self.current_times_error = 0
-        self.wait = 1
+        self.time_login = None
+        self.wait = 1.0
         self.running = True
         
 
     def run_background(self):
-        self.current_times_request = self.max_times_request
         self.current_times_error = 0
-        self.time = None
+        self.time_login = None
         self.wait = 0.0
+        self.is_internet_connected = False
+
         
-        def login_success():
-            self.current_times_request += 1
+        def display_login_info():
+            if self.time_login == None:
+                return
             self.status_label.configure(text="Status: Running", text_color = "green")
-            self.info_label.configure(text=f"Time: {self.time}\nCount: {self.current_times_request}/{self.max_times_request}")
+            elapsed = int((datetime.datetime.now() - self.time_login).total_seconds())
+            self.info_label.configure(text = f"TimeLogin: {self.time_login.strftime('%H:%M')}\n"f"TimeUsage: {elapsed//60:02d}:{elapsed%60:02d}")
 
         while self.start_app:
             
             if self.wait > 0:
+                if self.is_internet_connected:
+                    display_login_info()
                 self.wait -= 0.5
                 time.sleep(0.5)
                 continue
                 
             if self.running:
                 is_login_success = False
-                if self.current_times_request >= self.max_times_request:
+                if self.time_login == None or (datetime.datetime.now() - self.time_login).total_seconds() >= self.login_interval:
+                    self.is_internet_connected = False
+                    
                     if self.login():
+                        # successful login
                         is_login_success = True
-                        self.time = time.strftime("%H:%M")
-                        self.current_times_request = 0
+                        self.time_login = datetime.datetime.now()
                         self.current_times_error = 0
-                        # print('request true')
+
                     else:
-                        if self.current_times_error >= int(self.relogin_time/self.request_interval):
+                        # pause
+                        if self.current_times_error >= int(self.login_retry_duration/self.internet_check_interval):
                             self.running = False
                             self.status_label.configure(text="Status: Pause", text_color = "yellow")
-                            self.info_label.configure(text=f"Time: {time.strftime('%H:%M')}")
-                            # print('running false')
+                            self.info_label.configure(text=f"TimePause: {time.strftime('%H:%M')}")
+                            print("\n-----App paused.-----\n")
                             continue
 
+                        # handle error
                         self.current_times_error += 1
                         self.status_label.configure(text="Status: Error", text_color = "red")
-                        if self.relogin_time == self.never_time:
-                            self.info_label.configure(text=f"Count: {self.current_times_error}")
+                        if self.login_retry_duration == self.never_time:
+                            self.info_label.configure(text=f"Attempt: {self.current_times_error}")
                         else:
-                            self.info_label.configure(text=f"Count: {self.current_times_error}/{int(self.relogin_time/self.request_interval)}")
+                            self.info_label.configure(text=f"Attempt: {self.current_times_error}/{int(self.login_retry_duration/self.internet_check_interval)}")
 
-                        # print('request false')
-                        self.wait = self.request_interval
+                        self.wait = self.internet_check_interval
                         continue
 
+                # check internet
                 if not self.check_internet():
                     if is_login_success:
                         self.status_label.configure(text="Status: Error", text_color = "red")
                         self.info_label.configure(text="Login success but\nno internet!\nChecking...")
                         time.sleep(3)
                         
+                        # check internet again
                         attempt = 0
                         max_attempts = 15
                         while not self.check_internet() and attempt < max_attempts:
@@ -226,21 +239,19 @@ class MyApp:
                             attempt += 1
                             
                         if self.check_internet():
-                            login_success()
-                            self.wait = self.request_interval
+                            self.is_internet_connected = True
+                            self.wait = self.internet_check_interval
                             continue
                             
                         self.status_label.configure(text="Status: Error", text_color = "red")
                         self.info_label.configure(text="Login success but\nno internet!\nRe-login")
-                    self.current_times_request = self.max_times_request
-                    # print('check_internet false')
+                        
+                    self.time_login = None
                     continue
-                # else:
-                # print('check_internet true')
-
-                login_success()
+                
+                self.is_internet_connected = True
             
-            self.wait = self.request_interval
+            self.wait = self.internet_check_interval
 
 
     def login(self):
@@ -248,12 +259,13 @@ class MyApp:
             ip = self.get_router_ip()
             if ip == '':
                 self.ip_label.configure(text = '0.0.0.0')
+                print("---> Get Router IP failed.")
                 return False
             
             self.ip_label.configure(text = ip)
             
             req = requests.get(f'http://{ip}/logout?', timeout = 2, allow_redirects=False)
-            print("Logout:\n" + req.text + " " + str(req.status_code))
+            print("Logout: " + str(req.status_code))
             
         except requests.RequestException as e:
             print(f"Logout Request Exception: {e}")
@@ -262,31 +274,24 @@ class MyApp:
             print(f"Logout Exception: {e}")
             return False
         
-        time.sleep(0.5)
+        #time.sleep(0.5)
         
         session = requests.Session()
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Content-Type': 'application/x-www-form-urlencoded'
         }
-        gateway_url = "http://authen.awingconnect.vn/login"
-        
-        dummy_data = {
-            'username': "awing15-15",
-            'password': "6326e1c1739d4dabed8e2f8f4d7eb409",
-            'dst': 'http://v1.awingconnect.vn/Success',
-            'popup': 'false'
-        }
-
+        gateway_url = "http://192.168.200.1/login" # this ip address doesn't seem to be fixed
+    
         try:
-            resp_dummy = session.post(gateway_url, data=dummy_data, headers=headers, timeout = 2)
-            match = re.search(r'url=([^"]+)', resp_dummy.text)
+            resp_dummy = session.get(gateway_url, headers=headers, timeout = 2)
             
-            if not match:
-                print("[-] Không tìm thấy URL Redirect.")
+            redirect_url = self.process_interstitial_html(resp_dummy.text)
+            if not redirect_url:
+                print('\n' + resp_dummy.text)
+                print("---> Không tìm thấy URL Redirect.")
                 return False
 
-            redirect_url = match.group(1)
             print(redirect_url)
 
         except Exception as e:
@@ -304,12 +309,12 @@ class MyApp:
 
         try:
             resp_verify = session.post(verify_url, timeout = 2)
-            print(resp_verify.text)
             
             data = None
             try:
                 data = resp_verify.json()
             except Exception as e:
+                print('\n' + resp_verify.text)
                 print(f"JSON Decode Exception: {e}")
                 return False
 
@@ -330,20 +335,45 @@ class MyApp:
             }
 
             session.headers.update({'Content-Type': 'application/x-www-form-urlencoded'})
-            
-            print(session.headers.values())
             final_resp = session.post(real_action_url, data=final_payload, timeout = 2)
-            print(final_resp.text)
+
             if final_resp.status_code == 200 or final_resp.status_code == 302:
-                print("[SUCCESS] Đã đăng nhập thành công! :" + str(final_resp.status_code))
+                print("[SUCCESS] Đã đăng nhập thành công!: " + str(final_resp.status_code) + "\n")
                 return True
             
-            print(f"[FAIL] Server phản hồi: {final_resp.status_code}")
+            print('\n' + final_resp.text)
+            print(f"[FAIL] Server phản hồi: {final_resp.status_code}\n")
             return False
 
         except Exception as e:
-            print(f"Login Exception: {e}")
+            print(f"Login Exception: {e}\n")
             return False
+        
+    def process_interstitial_html(self, html):
+        soup = BeautifulSoup(html, 'html.parser')
+        form = soup.find('form', id='authForm')
+        
+        if not form:
+            print("Lỗi: Không tìm thấy form authForm trong HTML")
+            return None
+        
+        base_url = form.get('action')
+        
+        params = {}
+        for input_tag in form.find_all('input'):
+            name = input_tag.get('name')
+            value = input_tag.get('value', '')
+            
+            if name:
+                params[name] = value
+
+        current_timestamp = int(time.time() * 1000)
+        params['_t'] = str(current_timestamp)
+        
+        query_string = urllib.parse.urlencode(params)
+        final_url = f"{base_url}?{query_string}"
+        
+        return final_url
 
     def check_internet(self):
         try:
@@ -439,42 +469,39 @@ class MyApp:
         sys.exit(0)
         
 
-    def change_request_interval(self, value):
+    def change_internet_check_interval(self, value):
         value = int(value[:-1]) #omit the 's' symbol
-        if self.request_interval == value:
+        if self.internet_check_interval == value:
             return
-        self.request_interval = value
-        self.max_times_request = int(600 / self.request_interval)
-        self.current_times_request = self.max_times_request
+        
+        self.internet_check_interval = value
+        self.time_login = None
         self.current_times_error = 0
         self.wait = 0
-        self.save_winreg_variables(self.key_request_interval, value)
+        self.save_winreg_variables(self.key_internet_check_interval, value)
         
-    def change_relogin_time(self, value):
+    def change_login_retry_duration(self, value):
         if value == 'nv':
             value = self.never_time
         else:
             value = 60 * int(value[:-1]) #omit the 'm' symbol
-        if self.relogin_time == value:
+        if self.login_retry_duration == value:
             return
-        self.relogin_time = value
-        self.current_times_request = self.max_times_request
+        self.login_retry_duration = value
+        self.time_login = None
         self.current_times_error = 0
         self.wait = 0
-        self.save_winreg_variables(self.key_relogin_interval, value)
-
+        self.save_winreg_variables(self.key_login_retry_duration, value)
 
     def load_data(self):
-        request_interval = self.get_winreg_variables(self.key_request_interval)
-        if request_interval != None:
-            self.request_interval = request_interval
-            self.max_times_request = int(600 / request_interval)
-        
-        relogin_time = self.get_winreg_variables(self.key_relogin_interval)
-        if relogin_time != None:
-            self.relogin_time = relogin_time
-        
-
+        internet_check_interval = self.get_winreg_variables(self.key_internet_check_interval)
+        if internet_check_interval != None:
+            self.internet_check_interval = int(internet_check_interval)
+            
+        login_retry_duration = self.get_winreg_variables(self.key_login_retry_duration)
+        if login_retry_duration != None:
+            self.login_retry_duration = int(login_retry_duration)
+            
     def save_winreg_variables(self, name, value):
         key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\Request")
         if type(value) is str:
