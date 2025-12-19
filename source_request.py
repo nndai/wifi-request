@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QAction, QMenu
 class MyApp:
     def __init__(self, root):
         
-        self.version = '1.5.1'
+        self.version = '1.5.2'
         
         self.root = root
         
