@@ -25,7 +25,7 @@ from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QAction, QMenu
 class MyApp:
     def __init__(self, root):
         
-        self.version = '1.5'
+        self.version = '1.5.1'
         
         self.root = root
         
@@ -53,7 +53,7 @@ class MyApp:
 
 
     def init_window(self):
-        self.root.title("Request")
+        self.root.title("Request " + self.version)
         self.root.geometry("375x150")
         
         ctk.set_default_color_theme("blue")
@@ -281,7 +281,7 @@ class MyApp:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Content-Type': 'application/x-www-form-urlencoded'
         }
-        gateway_url = "http://192.168.200.1/login" # this ip address doesn't seem to be fixed
+        gateway_url = "http://authen.awingconnect.vn/login?r=1" # this ip address doesn't seem to be fixed
     
         try:
             resp_dummy = session.get(gateway_url, headers=headers, timeout = 2)
@@ -357,18 +357,24 @@ class MyApp:
             print("Lỗi: Không tìm thấy form authForm trong HTML")
             return None
         
-        base_url = form.get('action')
+        id_mapping = {
+            'serial': 'serial',
+            'client_mac': 'client_mac',
+            'client_ip': 'client_ip',
+            'userurl': 'userurl',
+            'login_url': 'login_url',
+            'chap-id': 'chap_id',
+            'chap-challenge': 'chap_challenge'
+        }
         
         params = {}
-        for input_tag in form.find_all('input'):
-            name = input_tag.get('name')
-            value = input_tag.get('value', '')
-            
-            if name:
-                params[name] = value
+        for html_id, url_param_name in id_mapping.items():
+            input_tag = form.find('input', id=html_id)
+            if input_tag:
+                value = input_tag.get('value', '')
+                params[url_param_name] = value
 
-        current_timestamp = int(time.time() * 1000)
-        params['_t'] = str(current_timestamp)
+        base_url = "http://v1.awingconnect.vn/login"
         
         query_string = urllib.parse.urlencode(params)
         final_url = f"{base_url}?{query_string}"
