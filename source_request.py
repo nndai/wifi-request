@@ -9,10 +9,12 @@ import datetime
 import requests
 import netifaces
 import subprocess
+import urllib.parse
 import image_base64
 from PIL import ImageTk
 import customtkinter as ctk
 from threading import Thread
+from bs4 import BeautifulSoup
 from PyQt5.QtCore import QPoint
 from win32com.client import Dispatch
 from PyQt5.QtGui import QIcon, QCursor, QPixmap
@@ -238,12 +240,15 @@ class MyApp:
                             if self.check_internet():
                                 self.is_internet = True
                                 self.wait = self.request_interval
+                                self.current_times_error = 0
                                 continue
                             
                             self.status_label.configure(text="Status: Error", text_color = "red")
                             self.info_label.configure(text="Login success but\nno internet!\nRe-login")
                         # print('check_internet false')
                         continue
+                    
+                    self.current_times_error = 0
 
                 self.is_internet = True
             
@@ -274,44 +279,35 @@ class MyApp:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Content-Type': 'application/x-www-form-urlencoded'
         }
-        
-        login_url = "http://156.156.157.29/login" # this ip address doesn't seem to be fixed
-        
-        dummy_data = {
-            'username': "awing15-15",
-            'password': "6326e1c1739d4dabed8e2f8f4d7eb409",
-            'dst': 'http://v1.awingconnect.vn/Success',
-            'popup': 'false'
-        }
-
+        gateway_url = f"http://{ip}/login?r=1" # this ip address doesn't seem to be fixed
+    
         try:
-            resp_dummy = session.post(login_url, data=dummy_data, headers=headers, timeout = 2)
-            match = re.search(r'url=([^"]+)', resp_dummy.text)
+            resp_dummy = session.get(gateway_url, headers=headers, timeout = 2)
             
-            if not match:
+            redirect_url = self.process_interstitial_html(resp_dummy.text)
+            if not redirect_url:
                 print('\n' + resp_dummy.text)
                 print("---> Không tìm thấy URL Redirect.")
                 return False
 
-            redirect_url = match.group(1)
-            print('\n' + redirect_url)
+            print(redirect_url)
 
         except Exception as e:
-            print(f"Lỗi kết nối Router: {e}")
+            print(f"[-] Lỗi kết nối Router: {e}")
             return False
         
         verify_url = "http://v1.awingconnect.vn/Home/VerifyUrl"
         
         session.headers.update({
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Referer': redirect_url,
             'X-Requested-With': 'XMLHttpRequest',
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Content-Type': 'application/json'
         })
 
         try:
             resp_verify = session.post(verify_url, timeout = 2)
-
+            
             data = None
             try:
                 data = resp_verify.json()
@@ -337,19 +333,51 @@ class MyApp:
             }
 
             session.headers.update({'Content-Type': 'application/x-www-form-urlencoded'})
-            final_resp = session.post(login_url, data=final_payload, timeout = 2)
-            
+            final_resp = session.post(real_action_url, data=final_payload, timeout = 2)
+
             if final_resp.status_code == 200 or final_resp.status_code == 302:
-                print("[SUCCESS] Đã đăng nhập thành công :" + str(final_resp.status_code))
+                print("[SUCCESS] Đã đăng nhập thành công!: " + str(final_resp.status_code) + "\n")
                 return True
             
             print('\n' + final_resp.text)
-            print(f"[FAIL] Server phản hồi: {final_resp.status_code}")
+            print(f"[FAIL] Server phản hồi: {final_resp.status_code}\n")
             return False
 
         except Exception as e:
-            print(f"Login Exception: {e}")
+            print(f"Login Exception: {e}\n")
             return False
+        
+    def process_interstitial_html(self, html):
+        soup = BeautifulSoup(html, 'html.parser')
+        form = soup.find('form', id='authForm')
+        
+        if not form:
+            print("Lỗi: Không tìm thấy form authForm trong HTML")
+            return None
+        
+        id_mapping = {
+            'serial': 'serial',
+            'client_mac': 'client_mac',
+            'client_ip': 'client_ip',
+            'userurl': 'userurl',
+            'login_url': 'login_url',
+            'chap-id': 'chap_id',
+            'chap-challenge': 'chap_challenge'
+        }
+        
+        params = {}
+        for html_id, url_param_name in id_mapping.items():
+            input_tag = form.find('input', id=html_id)
+            if input_tag:
+                value = input_tag.get('value', '')
+                params[url_param_name] = value
+
+        base_url = "http://v1.awingconnect.vn/login"
+        
+        query_string = urllib.parse.urlencode(params)
+        final_url = f"{base_url}?{query_string}"
+        
+        return final_url
 
     def check_internet(self):
         try:
