@@ -168,26 +168,63 @@ class MyApp:
         self.wait = 1.0
         self.running = True
         
+    
+    def display_login_info(self):
+        if self.time_login == None:
+            return
+        self.status_label.configure(text="Status: Running", text_color = "green")
+        elapsed = int((datetime.datetime.now() - self.time_login).total_seconds())
+        self.info_label.configure(text = f"TimeLogin: {self.time_login.strftime('%H:%M')}\n"f"TimeUsage: {elapsed//60:02d}:{elapsed%60:02d}")
+    
+    def error_login_handle(self):
+        if self.current_times_error >= int(self.login_retry_duration/self.internet_check_interval):
+            self.running = False
+            self.status_label.configure(text="Status: Pause", text_color = "yellow")
+            self.info_label.configure(text=f"TimePause: {time.strftime('%H:%M')}")
+            print("\n-----App paused.-----\n")
+            return
 
-    def run_background(self):
-        self.current_times_error = 0
-        self.time_login = None
-        self.wait = 0.0
-        self.is_internet_connected = False
+        # handle error
+        self.current_times_error += 1
+        self.status_label.configure(text="Status: Error", text_color = "red")
+        if self.login_retry_duration == self.never_time:
+            self.info_label.configure(text=f"Attempt: {self.current_times_error}")
+        else:
+            self.info_label.configure(text=f"Attempt: {self.current_times_error}/{int(self.login_retry_duration/self.internet_check_interval)}")
 
+        self.wait = self.internet_check_interval
         
-        def display_login_info():
-            if self.time_login == None:
+        
+    def login_success_but_no_internet_handle(self, is_login_success):
+        if is_login_success:
+            self.status_label.configure(text="Status: Error", text_color = "red")
+            self.info_label.configure(text="Login success but\nno internet!\nChecking...")
+            time.sleep(3)
+            
+            # check internet again
+            attempt = 0
+            max_attempts = 15
+            while not self.check_internet() and attempt < max_attempts:
+                self.info_label.configure(text="Login success but\nno internet!\nChecking...\nAttempt: " + str(attempt + 1) + "/" + str(max_attempts))
+                time.sleep(0.2)
+                attempt += 1
+                
+            if self.check_internet():
+                self.is_internet_connected = True
+                self.wait = self.internet_check_interval
                 return
-            self.status_label.configure(text="Status: Running", text_color = "green")
-            elapsed = int((datetime.datetime.now() - self.time_login).total_seconds())
-            self.info_label.configure(text = f"TimeLogin: {self.time_login.strftime('%H:%M')}\n"f"TimeUsage: {elapsed//60:02d}:{elapsed%60:02d}")
+                
+            self.status_label.configure(text="Status: Error", text_color = "red")
+            self.info_label.configure(text="Login success but\nno internet!\nRe-login")
+            
+        self.time_login = None
 
+    def run_have_logout(self):
         while self.start_app:
             
             if self.wait > 0:
                 if self.is_internet_connected:
-                    display_login_info()
+                    self.display_login_info()
                 self.wait -= 0.5
                 time.sleep(0.5)
                 continue
@@ -205,67 +242,76 @@ class MyApp:
 
                     else:
                         # pause
-                        if self.current_times_error >= int(self.login_retry_duration/self.internet_check_interval):
-                            self.running = False
-                            self.status_label.configure(text="Status: Pause", text_color = "yellow")
-                            self.info_label.configure(text=f"TimePause: {time.strftime('%H:%M')}")
-                            print("\n-----App paused.-----\n")
-                            continue
-
-                        # handle error
-                        self.current_times_error += 1
-                        self.status_label.configure(text="Status: Error", text_color = "red")
-                        if self.login_retry_duration == self.never_time:
-                            self.info_label.configure(text=f"Attempt: {self.current_times_error}")
-                        else:
-                            self.info_label.configure(text=f"Attempt: {self.current_times_error}/{int(self.login_retry_duration/self.internet_check_interval)}")
-
-                        self.wait = self.internet_check_interval
+                        self.error_login_handle()
                         continue
 
                 # check internet
                 if not self.check_internet():
-                    if is_login_success:
-                        self.status_label.configure(text="Status: Error", text_color = "red")
-                        self.info_label.configure(text="Login success but\nno internet!\nChecking...")
-                        time.sleep(3)
-                        
-                        # check internet again
-                        attempt = 0
-                        max_attempts = 15
-                        while not self.check_internet() and attempt < max_attempts:
-                            self.info_label.configure(text="Login success but\nno internet!\nChecking...\nAttempt: " + str(attempt + 1) + "/" + str(max_attempts))
-                            time.sleep(0.2)
-                            attempt += 1
-                            
-                        if self.check_internet():
-                            self.is_internet_connected = True
-                            self.wait = self.internet_check_interval
-                            continue
-                            
-                        self.status_label.configure(text="Status: Error", text_color = "red")
-                        self.info_label.configure(text="Login success but\nno internet!\nRe-login")
-                        
-                    self.time_login = None
+                    self.login_success_but_no_internet_handle(is_login_success)
                     continue
                 
                 self.is_internet_connected = True
             
             self.wait = self.internet_check_interval
+        
+    def run_no_logout(self):
+        self.display_ip()
+        
+        while self.start_app:
+            if self.wait > 0:
+                if self.is_internet_connected:
+                    self.display_login_info()
+                self.wait -= 0.5
+                time.sleep(0.5)
+                continue
+                
+            if self.running:
+                is_login_success = False
+                if not self.check_internet():
+                    self.is_internet_connected = False
+                    
+                    if self.login(False):
+                        # successful login
+                        is_login_success = True
+                        self.time_login = datetime.datetime.now()
+                        self.current_times_error = 0
+                        
+                    else:
+                        # pause
+                        self.error_login_handle()
+                        continue
 
+                    # check internet after login
+                    if not self.check_internet():
+                        self.login_success_but_no_internet_handle(is_login_success)
+                        continue
+                    
+                    self.current_times_error = 0
 
-    def login(self):
+                self.is_internet_connected = True
+                if self.time_login is None:
+                    self.time_login = datetime.datetime.now()
+            
+            self.wait = self.internet_check_interval
+            
+    def run_background(self):
+        self.current_times_error = 0
+        self.time_login = None
+        self.wait = 0.0
+        self.is_internet_connected = False
+        
+        self.run_no_logout()
+        #self.run_have_logout()
+
+    def login(self, is_logout=True):
         try:
-            ip = self.get_router_ip()
+            ip = self.display_ip()
             if ip == '':
-                self.ip_label.configure(text = '0.0.0.0')
-                print("---> Get Router IP failed.")
                 return False
             
-            self.ip_label.configure(text = ip)
-            
-            req = requests.get(f'http://{ip}/logout?', timeout = 2, allow_redirects=False)
-            print("Logout: " + str(req.status_code))
+            if is_logout:
+                req = requests.get(f'http://{ip}/logout?', timeout = 2, allow_redirects=False)
+                print("Logout: " + str(req.status_code))
             
         except requests.RequestException as e:
             print(f"Logout Request Exception: {e}")
@@ -281,7 +327,7 @@ class MyApp:
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
             'Content-Type': 'application/x-www-form-urlencoded'
         }
-        gateway_url = "http://authen.awingconnect.vn/login?r=1" # this ip address doesn't seem to be fixed
+        gateway_url = f"http://{ip}/login?r=1" # this ip address doesn't seem to be fixed
     
         try:
             resp_dummy = session.get(gateway_url, headers=headers, timeout = 2)
@@ -394,6 +440,15 @@ class MyApp:
         if 'time' in result:
             return True
         return False
+    
+    def display_ip(self):
+        ip = self.get_router_ip()
+        if ip == '':
+            self.ip_label.configure(text = '0.0.0.0')
+            return ''
+        
+        self.ip_label.configure(text = ip)
+        return ip
 
     def get_router_ip(self):
         router_ip = ''
