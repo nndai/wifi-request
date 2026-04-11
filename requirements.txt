@@ -1,0 +1,7 @@
+beautifulsoup4
+customtkinter
+netifaces
+Pillow
+PyQt5
+pywin32
+requests
