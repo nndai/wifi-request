@@ -93,7 +93,7 @@ class MyApp:
         self.control_frame = ctk.CTkFrame(root,width=300,height=50)
         self.control_frame.place(x=200,y=15)
         
-        self.ip_frame = ctk.CTkFrame(self.control_frame, width=300,height=10, fg_color = "#1f6aa5",)
+        self.ip_frame = ctk.CTkFrame(self.control_frame, width=300,height=10, fg_color = "#2d7cbb",)
         self.ip_frame.grid(row=0, column=0, padx=7,pady=7, sticky="w")
         self.ip_label = ctk.CTkLabel(
             self.ip_frame,
@@ -101,6 +101,7 @@ class MyApp:
             font=("JetBrains Mono", 14, "bold"), 
             anchor="center",
             text="0.0.0.0",
+            text_color="#dce4e4"
         )
         self.ip_label.grid(row=0, column=0, padx=7,pady=5, sticky="w")
         
@@ -427,19 +428,33 @@ class MyApp:
         
         return final_url
 
+    # def check_internet(self):
+    #     try:
+    #         result = subprocess.run(['ping', '-n', '1', '-l', '1', '203.162.4.191'],timeout = 1, 
+    #                                 stdout = subprocess.PIPE,
+    #                                 stderr = subprocess.PIPE, 
+    #                                 creationflags = subprocess.CREATE_NO_WINDOW).stdout.decode('utf-8')
+    #     except subprocess.TimeoutExpired:
+    #         print("Ping Timeout")
+    #         return False
+        
+    #     if 'time' in result:
+    #         return True
+    #     return False
+    
     def check_internet(self):
         try:
-            result = subprocess.run(['ping', '-n', '1', '-l', '1', '203.162.4.191'],timeout = 1, 
+            result = subprocess.run(['curl', '-I', 'http://115.79.4.48/'],timeout = 1, 
                                     stdout = subprocess.PIPE,
                                     stderr = subprocess.PIPE, 
                                     creationflags = subprocess.CREATE_NO_WINDOW).stdout.decode('utf-8')
         except subprocess.TimeoutExpired:
-            print("Ping Timeout")
+            print("Curl Timeout")
             return False
         
-        if 'time' in result:
-            return True
-        return False
+        if 'dst' in result:
+            return False
+        return True
     
     def display_ip(self):
         ip = self.get_router_ip()
