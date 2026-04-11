@@ -32,8 +32,13 @@ class MyApp:
         self.internet_check_interval = 5        #(second), the time between two internet checks or login attempts
         self.login_interval = 600               #(second), time between two logins
         self.login_retry_duration = 5 * 60      #(second), max time to retry login if failed
-        self.last_click_time = 0
         self.never_time = 60 * 60 * 24 * 7      #~1week, never pause relogin
+
+        self.button_default_text = "Request"
+        self.button_spinner_frames = ["Request |", "Request /", "Request -", "Request \\"]
+        self.button_spinner_index = 0
+        self.button_is_spinning = False
+        self.button_spin_job = None
 
         self.key_internet_check_interval = "internet_check_interval"
         self.key_login_retry_duration = "login_retry_duration"
@@ -146,7 +151,7 @@ class MyApp:
         self.button = ctk.CTkButton(
             self.control_frame,
             width = 146,
-            text="Request", 
+            text=self.button_default_text,
             command=self.login_by_button, 
             font=("JetBrains Mono", 14,"bold")
         )
@@ -155,19 +160,48 @@ class MyApp:
         
         
     def login_by_button(self):
-        current_time = time.time()
-        if current_time - self.last_click_time < 1:
-            self.running = True
-            return
-        
-        self.last_click_time = current_time
         self.status_label.configure(text="Logging in......", text_color = "white")
         self.info_label.configure(text="")
-        #Thread(target=self.login).start()
+        self.start_button_spinner()
+        Thread(target=self.login_by_button_worker, daemon=True).start()
         self.current_times_error = 0
         self.time_login = None
         self.wait = 1.0
         self.running = True
+
+    def login_by_button_worker(self):
+        try:
+            self.login(is_logout=False)
+        finally:
+            try:
+                self.root.after(0, self.stop_button_spinner)
+            except Exception:
+                pass
+
+    def spin_button(self):
+        if not self.button_is_spinning:
+            return
+
+        self.button.configure(text=self.button_spinner_frames[self.button_spinner_index])
+        self.button_spinner_index = (self.button_spinner_index + 1) % len(self.button_spinner_frames)
+        self.button_spin_job = self.root.after(120, self.spin_button)
+
+    def start_button_spinner(self):
+        if self.button_is_spinning:
+            return
+
+        self.button_is_spinning = True
+        self.button_spinner_index = 0
+        self.button.configure(state="disabled")
+        self.spin_button()
+
+    def stop_button_spinner(self):
+        self.button_is_spinning = False
+        if self.button_spin_job is not None:
+            self.root.after_cancel(self.button_spin_job)
+            self.button_spin_job = None
+
+        self.button.configure(text=self.button_default_text, state="normal")
         
     
     def display_login_info(self):
