@@ -40,7 +40,7 @@ class DoubleClickWin32Icon(pystray_win32.Icon):
 class MyApp:
     def __init__(self, root):
         
-        self.version = '1.5.5'
+        self.version = '1.5.6'
         
         self.root = root
         
