@@ -2,6 +2,6 @@ beautifulsoup4
 customtkinter
 netifaces
 Pillow
-PyQt5
+pystray
 pywin32
 requests

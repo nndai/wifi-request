@@ -11,14 +11,29 @@ import netifaces
 import subprocess
 import image_base64
 import urllib.parse
-from PIL import ImageTk
+import pystray
+from pystray import _win32 as pystray_win32
+from pystray._util import win32 as win32_const
+from io import BytesIO
+from PIL import Image, ImageTk
 import customtkinter as ctk
-from threading import Thread
+from threading import Thread, current_thread
 from bs4 import BeautifulSoup
-from PyQt5.QtCore import QPoint
 from win32com.client import Dispatch
-from PyQt5.QtGui import QIcon, QCursor, QPixmap
-from PyQt5.QtWidgets import QApplication, QSystemTrayIcon, QAction, QMenu
+
+
+WM_LBUTTONDBLCLK = 0x0203
+
+
+class DoubleClickWin32Icon(pystray_win32.Icon):
+    def _on_notify(self, wparam, lparam):
+        if lparam == WM_LBUTTONDBLCLK:
+            return super()._on_notify(wparam, win32_const.WM_LBUTTONUP)
+
+        if lparam == win32_const.WM_LBUTTONUP:
+            return
+
+        return super()._on_notify(wparam, lparam)
 
 
 
@@ -43,17 +58,18 @@ class MyApp:
         self.key_internet_check_interval = "internet_check_interval"
         self.key_login_retry_duration = "login_retry_duration"
 
+        self.tray_icon = None
+        self.running = True
+        self.run_thread = None
+
         self.load_data()
         self.init_window()
         
 
-        self.tray_thread = Thread(target=self.create_tray_icon)
+        self.tray_thread = Thread(target=self.create_tray_icon, daemon=True)
         self.tray_thread.start()
 
-        self.start_app = True
-        self.running = True
-        self.run_thread = Thread(target=self.run_background)
-        self.run_thread.start()
+        self.start_run_thread()
 
 
 
@@ -168,6 +184,8 @@ class MyApp:
         self.time_login = None
         self.wait = 1.0
         self.running = True
+        self.start_run_thread()
+        self.refresh_tray_menu()
 
     def login_by_button_worker(self):
         try:
@@ -216,6 +234,7 @@ class MyApp:
             self.running = False
             self.status_label.configure(text="Status: Pause", text_color = "yellow")
             self.info_label.configure(text=f"TimePause: {time.strftime('%H:%M')}")
+            self.refresh_tray_menu()
             print("\n-----App paused.-----\n")
             return
 
@@ -255,7 +274,7 @@ class MyApp:
         self.time_login = None
 
     def run_have_logout(self):
-        while self.start_app:
+        while self.running:
             
             if self.wait > 0:
                 if self.is_internet_connected:
@@ -264,35 +283,35 @@ class MyApp:
                 time.sleep(0.5)
                 continue
                 
-            if self.running:
-                is_login_success = False
-                if self.time_login == None or (datetime.datetime.now() - self.time_login).total_seconds() >= self.login_interval:
-                    self.is_internet_connected = False
-                    
-                    if self.login():
-                        # successful login
-                        is_login_success = True
-                        self.time_login = datetime.datetime.now()
-                        self.current_times_error = 0
-
-                    else:
-                        # pause
-                        self.error_login_handle()
-                        continue
-
-                # check internet
-                if not self.check_internet():
-                    self.login_success_but_no_internet_handle(is_login_success)
-                    continue
+      
+            is_login_success = False
+            if self.time_login == None or (datetime.datetime.now() - self.time_login).total_seconds() >= self.login_interval:
+                self.is_internet_connected = False
                 
-                self.is_internet_connected = True
+                if self.login():
+                    # successful login
+                    is_login_success = True
+                    self.time_login = datetime.datetime.now()
+                    self.current_times_error = 0
+
+                else:
+                    # pause
+                    self.error_login_handle()
+                    continue
+
+            # check internet
+            if not self.check_internet():
+                self.login_success_but_no_internet_handle(is_login_success)
+                continue
+            
+            self.is_internet_connected = True
             
             self.wait = self.internet_check_interval
         
     def run_no_logout(self):
         self.display_ip()
         
-        while self.start_app:
+        while self.running:
             if self.wait > 0:
                 if self.is_internet_connected:
                     self.display_login_info()
@@ -300,32 +319,31 @@ class MyApp:
                 time.sleep(0.5)
                 continue
                 
-            if self.running:
-                is_login_success = False
-                if not self.check_internet():
-                    self.is_internet_connected = False
-                    
-                    if self.login(False):
-                        # successful login
-                        is_login_success = True
-                        self.time_login = datetime.datetime.now()
-                        self.current_times_error = 0
-                        
-                    else:
-                        # pause
-                        self.error_login_handle()
-                        continue
-
-                    # check internet after login
-                    if not self.check_internet():
-                        self.login_success_but_no_internet_handle(is_login_success)
-                        continue
-                    
-                    self.current_times_error = 0
-
-                self.is_internet_connected = True
-                if self.time_login is None:
+            is_login_success = False
+            if not self.check_internet():
+                self.is_internet_connected = False
+                
+                if self.login(False):
+                    # successful login
+                    is_login_success = True
                     self.time_login = datetime.datetime.now()
+                    self.current_times_error = 0
+                    
+                else:
+                    # pause
+                    self.error_login_handle()
+                    continue
+
+                # check internet after login
+                if not self.check_internet():
+                    self.login_success_but_no_internet_handle(is_login_success)
+                    continue
+                
+                self.current_times_error = 0
+
+            self.is_internet_connected = True
+            if self.time_login is None:
+                self.time_login = datetime.datetime.now()
             
             self.wait = self.internet_check_interval
             
@@ -337,6 +355,16 @@ class MyApp:
         
         self.run_no_logout()
         #self.run_have_logout()
+
+    def start_run_thread(self):
+        if not self.running:
+            return
+
+        if self.run_thread is not None and self.run_thread.is_alive():
+            return
+
+        self.run_thread = Thread(target=self.run_background, daemon=True)
+        self.run_thread.start()
 
     def login(self, is_logout=True):
         try:
@@ -508,55 +536,76 @@ class MyApp:
         return router_ip
 
     def create_tray_icon(self):
-        self.Qapp = QApplication(sys.argv)
-        self.tray_icon = QSystemTrayIcon(QIcon(self.get_qicon_from_base64(image_base64.APP_ICON_BASE64)))
-        self.tray_icon.setToolTip("Request " + self.version)
+        tray_image = self.get_pil_image_from_base64(image_base64.APP_ICON_BASE64)
+        if tray_image is None:
+            return
 
-        self.menu = QMenu()
-        self.show_action = QAction(QIcon(self.get_qicon_from_base64(image_base64.SHOW_IMAGE_BASE64)), 'Show')
-        self.show_action.triggered.connect(self.show_window)
-        self.menu.addAction(self.show_action)
+        menu = pystray.Menu(
+            pystray.MenuItem('Toggle window', self.on_tray_toggle_window, default=True, visible=False),
+            pystray.MenuItem('Show', self.on_tray_show),
+            pystray.MenuItem(self.get_pause_menu_label, self.on_tray_toggle_pause),
+            pystray.Menu.SEPARATOR,
+            pystray.MenuItem('Exit', self.on_tray_exit)
+        )
 
-        self.exit_action = QAction(QIcon(self.get_qicon_from_base64(image_base64.EXIT_IMAGE_BASE64)), 'Exit')
-        self.exit_action.triggered.connect(self.end_app)
-        self.menu.addAction(self.exit_action)
+        self.tray_icon = DoubleClickWin32Icon("request", tray_image, f"Request {self.version}", menu)
+        self.tray_icon.run()
 
-        self.menu.setStyleSheet("""
-            QMenu {
-                background-color: #333333; /* Dark background */
-                color: #FFFFFF; /* White text */
-                border: 2px solid #666666; /* Border */
-                border-radius: 5px; /* Rounded corners */
-                padding: 5px 20px 5px 10px; /* Padding for the entire menu */
-                font-family: Arial; /* Font family */
-                font-weight: bold; /* Font weight */
-            }
-            QMenu::item {
-                padding: 5px 20px 5px 10px;            
-                border-radius: 5px; /* Rounded corners for menu items */
-            }
-            QMenu::item:selected {
-                background-color: #666666; /* Hover background */
-                border-radius: 5px; /* Rounded corners */                       
-            }
-        """)
+    def on_tray_show(self, icon, item):
+        self.root.after(0, self.show_window)
 
-        self.tray_icon.setContextMenu(self.menu)
-        self.tray_icon.activated.connect(self.on_tray_icon_activated)
-        self.tray_icon.show()
-        sys.exit(self.Qapp.exec_())
-        
+    def on_tray_toggle_window(self, icon, item):
+        self.root.after(0, self.toggle_window_visibility)
 
-    def on_tray_icon_activated(self, reason):
-        if reason == QSystemTrayIcon.DoubleClick:
-            if self.root.winfo_viewable():
-                self.on_closing()
-            else:
-                self.show_window()
-        if reason == QSystemTrayIcon.Context:
-            cursor_pos = QCursor.pos()
-            adjusted_pos = QPoint(cursor_pos.x() - 100 , cursor_pos.y() - 100)
-            self.menu.popup(adjusted_pos)      
+    def toggle_window_visibility(self):
+        if self.root.winfo_viewable():
+            self.on_closing()
+        else:
+            self.show_window()
+
+    def on_tray_toggle_pause(self, icon, item):
+        if self.running:
+            self.pause_app()
+        else:
+            self.resume_app()
+
+        self.refresh_tray_menu()
+
+    def get_pause_menu_label(self, item):
+        if self.running:
+            return 'Pause'
+        return 'Resume'
+
+    def refresh_tray_menu(self):
+        if self.tray_icon is not None:
+            try:
+                self.tray_icon.update_menu()
+            except Exception:
+                pass
+
+    def on_tray_exit(self, icon, item):
+        self.end_app()
+
+    def pause_app(self):
+        self.running = False
+        self.wait = 0
+
+        if self.run_thread is not None and self.run_thread.is_alive() and self.run_thread != current_thread():
+            self.run_thread.join(timeout=3)
+
+        self.refresh_tray_menu()
+        self.root.after(0, lambda: self.status_label.configure(text="Status: Pause", text_color="yellow"))
+        self.root.after(0, lambda: self.info_label.configure(text=f"TimePause: {time.strftime('%H:%M')}"))
+
+    def resume_app(self):
+        self.running = True
+        self.time_login = None
+        self.current_times_error = 0
+        self.wait = 0
+        self.start_run_thread()
+        self.refresh_tray_menu()
+        self.root.after(0, lambda: self.status_label.configure(text="Status: Running", text_color="green"))
+        self.root.after(0, lambda: self.info_label.configure(text="Resuming..."))
 
     def remove_minimize_maximize(self):
         hwnd = ctypes.windll.user32.GetParent(self.root.winfo_id())
@@ -571,12 +620,26 @@ class MyApp:
     def on_closing(self):
         self.root.withdraw()
     def end_app(self):
-        self.on_closing()
-        self.Qapp.quit()
-        self.start_app = False
-        self.run_thread.join()
-        self.root.quit()
-        sys.exit(0)
+        self.running = False
+
+        try:
+            self.root.after(0, self.on_closing)
+        except Exception:
+            pass
+
+        if self.tray_icon is not None:
+            try:
+                self.tray_icon.stop()
+            except Exception:
+                pass
+
+        if self.run_thread is not None and self.run_thread.is_alive() and self.run_thread != current_thread():
+            self.run_thread.join(timeout=2)
+
+        try:
+            self.root.after(0, self.root.quit)
+        except Exception:
+            pass
         
 
     def change_internet_check_interval(self, value):
@@ -630,13 +693,12 @@ class MyApp:
             return None
     
     
-    def get_qicon_from_base64(self, data_base64):
-        image_data = base64.b64decode(data_base64)
-        pixmap = QPixmap()
-        if pixmap.loadFromData(image_data):
-            return QIcon(pixmap)
-        else:
-            return None 
+    def get_pil_image_from_base64(self, data_base64):
+        try:
+            image_data = base64.b64decode(data_base64)
+            return Image.open(BytesIO(image_data)).convert("RGBA")
+        except Exception:
+            return None
         
 
 def add_to_startup_folder(app_name="request"):
