@@ -2,14 +2,17 @@ import os
 import re
 import sys
 import time
+import zlib
 import base64
 import ctypes
 import winreg
+import tempfile
 import requests
 import datetime
 import netifaces
 import subprocess
 import image_base64
+import font_base64
 import urllib.parse
 import pystray
 from pystray import _win32 as pystray_win32
@@ -97,7 +100,7 @@ class MyApp:
         self.status_label = ctk.CTkLabel(
             self.info_frame, 
             width=150, height=10, 
-            font=("JetBrains Mono",14 ,"bold"), 
+            font=("JetBrains Mono", 14, "bold"), 
             justify="left", 
             anchor="nw", text="", 
             wraplength=380
@@ -107,7 +110,7 @@ class MyApp:
         self.info_label = ctk.CTkLabel(
             self.info_frame, 
             width=150, height=89, 
-            font=("JetBrains Mono",14 ,"bold"), 
+            font=("JetBrains Mono", 14, "bold"), 
             justify="left", 
             anchor="nw", text="", 
             wraplength=380
@@ -150,7 +153,7 @@ class MyApp:
             width = 146,
             text=self.button_default_text,
             command=self.login_by_button, 
-            font=("JetBrains Mono", 14,"bold"),
+            font=("JetBrains Mono", 14, "bold"),
             fg_color = "#2d7cbb"
         )
         self.button.grid(row=2, column=0, padx=7,pady=7, sticky="w")
@@ -718,6 +721,23 @@ def add_to_startup_folder(app_name="request"):
     except Exception as e:
         pass
 
+def load_embedded_font():
+    try:
+        temp_dir = os.path.join(tempfile.gettempdir(), "WiFiRequestFont")
+        os.makedirs(temp_dir, exist_ok=True)
+        font_path = os.path.join(temp_dir, "JetBrainsMono-Bold.ttf")
+
+        if not os.path.exists(font_path) or os.path.getsize(font_path) == 0:
+            font_data = zlib.decompress(base64.b64decode(font_base64.FONT_JETBRAINS_MONO_BOLD))
+            with open(font_path, "wb") as f:
+                f.write(font_data)
+
+        # 0x10 = FR_PRIVATE: Nạp font riêng cho tiến trình này, tự giải phóng khi tắt app
+        ctypes.windll.gdi32.AddFontResourceExW(font_path, 0x10, 0)
+    except Exception as e:
+        print(f"Font loading error: {e}")
+
+
 def check_single_instance():
     ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\RequestAppMutex")
     if ctypes.GetLastError() == 183:
@@ -733,6 +753,7 @@ def check_single_instance():
 
 if __name__ == "__main__":
     check_single_instance()
+    load_embedded_font()
     
     root = ctk.CTk()
     app = MyApp(root)
