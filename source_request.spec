@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['source_request.py'],
+    ['src_wifi_request.py'],
     pathex=[],
     binaries=[],
     datas=[],

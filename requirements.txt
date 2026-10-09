@@ -5,3 +5,4 @@ Pillow
 pystray
 pywin32
 requests
+pyinstaller
