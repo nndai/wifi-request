@@ -83,7 +83,7 @@ class MyApp:
 
     def init_window(self):
         self.root.title("WiFi Request " + self.version)
-        self.root.geometry("375x150")
+        self.root.geometry("372x146")
         
         ctk.set_default_color_theme("blue")
         self.root.resizable(False, False)
