@@ -514,6 +514,11 @@ class MyApp:
             print("Curl Timeout")
             return False
         
+        #print(result)
+        
+        if result == "":
+            return False
+    
         if 'dst' in result:
             return False
         return True
