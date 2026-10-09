@@ -89,7 +89,7 @@ class MyApp:
         self.root._iconbitmap_method_called = True  # Prevents the icon from being overwritten by the default icon
         root.tk.call("wm", "iconphoto", root._w, ImageTk.PhotoImage(data=base64.b64decode(image_base64.APP_ICON_BASE64)))
         # self.root.attributes("-topmost", True)
-        self.on_closing()
+        # self.on_closing()
 
         self.info_frame = ctk.CTkFrame(root, border_color="blue",width=250,height=100)
         self.info_frame.place(x=15,y=15)
