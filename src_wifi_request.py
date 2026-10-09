@@ -43,7 +43,7 @@ class DoubleClickWin32Icon(pystray_win32.Icon):
 class MyApp:
     def __init__(self, root):
         
-        self.version = '1.5.6'
+        self.version = '1.5.7'
         
         self.root = root
         
@@ -760,6 +760,3 @@ if __name__ == "__main__":
     root.protocol("WM_DELETE_WINDOW", app.on_closing)
     add_to_startup_folder()
     root.mainloop()
-
-
-    #python -m PyInstaller source_request.spec

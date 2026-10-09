@@ -46,7 +46,7 @@ Dành cho người dùng thông thường — **không cần cài đặt Python*
 
 ---
 
-## 💻 Dành cho lập trình viên (Chạy từ mã nguồn)
+## 💻 Chạy từ mã nguồn
 
 ### 1. Tải mã nguồn
 ```bash
@@ -68,18 +68,16 @@ python src_wifi_request.py
 
 ## 📦 Hướng dẫn đóng gói thành file thực thi (.EXE)
 
-Dự án đã chuẩn bị sẵn file cấu hình [`source_request.spec`](source_request.spec) và siêu dữ liệu phiên bản [`version_request.txt`](version_request.txt).
+Dự án đã chuẩn bị sẵn file cấu hình [`wifi_request.spec`](wifi_request.spec) và siêu dữ liệu phiên bản [`version_wifi_request.txt`](version_wifi_request.txt).
 
 Để đóng gói thành một file `wifi_request.exe` độc lập duy nhất:
 
 ```bash
-pyinstaller source_request.spec
+python -m PyInstaller wifi_request.spec
 ```
-*(hoặc `python -m PyInstaller source_request.spec`)*
 
-Sau khi quá trình biên dịch hoàn tất:
-* File thực thi sẽ nằm tại: **`dist/wifi_request.exe`**
-* Bạn chỉ cần copy **duy nhất file `wifi_request.exe` này** sang bất kỳ máy tính nào khác là có thể chạy ngay lập tức, không cần cài Python hay thư viện gì thêm!
+File thực thi sẽ nằm tại: **`dist/wifi_request.exe`**
+
 
 ---
 
@@ -94,8 +92,8 @@ Sau khi quá trình biên dịch hoàn tất:
 ├── image_base64.py           # Icon ứng dụng nhúng base64
 ├── requirements.txt          # Danh sách thư viện phụ thuộc
 ├── src_wifi_request.py       # Mã nguồn chính của ứng dụng
-├── source_request.spec       # Cấu hình đóng gói PyInstaller
-└── version_request.txt       # Thông tin phiên bản & bản quyền Windows EXE
+├── wifi_request.spec         # Cấu hình đóng gói PyInstaller
+└── version_wifi_request.txt  # Thông tin phiên bản & bản quyền Windows EXE
 ```
 
 ---

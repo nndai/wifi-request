@@ -36,5 +36,5 @@ exe = EXE(
     codesign_identity=None,
     entitlements_file=None,
     icon=['icon\\app.png'],
-    version='version_request.txt',
+    version='version_wifi_request.txt',
 )
