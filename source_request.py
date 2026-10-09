@@ -721,6 +721,13 @@ def add_to_startup_folder(app_name="request"):
 def check_single_instance():
     ctypes.windll.kernel32.CreateMutexW(None, False, "Global\\RequestAppMutex")
     if ctypes.GetLastError() == 183:
+        # MB_OK (0x0) | MB_ICONINFORMATION (0x40) | MB_TOPMOST (0x40000)
+        ctypes.windll.user32.MessageBoxW(
+            None,
+            "Ứng dụng đang chạy nền. Vui lòng nhấp vào icon ở khay hệ thống để mở lại.",
+            " WiFi Request",
+            0x00000040 | 0x00040000
+        )
         sys.exit(0)
 
 
