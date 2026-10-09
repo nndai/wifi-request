@@ -82,7 +82,7 @@ class MyApp:
 
 
     def init_window(self):
-        self.root.title("Request " + self.version)
+        self.root.title("WiFi Request " + self.version)
         self.root.geometry("375x150")
         
         ctk.set_default_color_theme("blue")
@@ -565,7 +565,7 @@ class MyApp:
             pystray.MenuItem('Exit', self.on_tray_exit)
         )
 
-        self.tray_icon = DoubleClickWin32Icon("request", tray_image, f"Request {self.version}", menu)
+        self.tray_icon = DoubleClickWin32Icon("wifi_request", tray_image, f"WiFi Request {self.version}", menu)
         self.tray_icon.run()
 
     def on_tray_show(self, icon, item):
@@ -666,7 +666,7 @@ class MyApp:
         pass
 
     def save_winreg_variables(self, name, value):
-        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\Request")
+        key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\WiFiRequest")
         if type(value) is str:
             winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
         else:
@@ -675,7 +675,7 @@ class MyApp:
 
     def get_winreg_variables(self, name):
         try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\Request")
+            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, "Software\\WiFiRequest")
             value = winreg.QueryValueEx(key, name)[0]
             winreg.CloseKey(key)
             return value
@@ -745,7 +745,7 @@ def check_single_instance():
         ctypes.windll.user32.MessageBoxW(
             None,
             "Ứng dụng đang chạy nền. Vui lòng nhấp vào icon ở khay hệ thống để mở lại.",
-            " WiFi Request",
+            "WiFi Request",
             0x00000040 | 0x00040000
         )
         sys.exit(0)

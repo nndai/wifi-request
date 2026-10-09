@@ -22,7 +22,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='request',
+    name='wifi_request',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
