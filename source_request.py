@@ -44,16 +44,21 @@ class MyApp:
         
         self.root = root
         
-        self.internet_check_interval = 5        #(second), the time between two internet checks or login attempts
+        self.internet_check_interval = 2        #(second), the time between two internet checks or login attempts
         self.login_interval = 600               #(second), time between two logins
-        self.login_retry_duration = 5 * 60      #(second), max time to retry login if failed
         self.never_time = 60 * 60 * 24 * 7      #~1week, never pause relogin
+        self.login_retry_duration = self.never_time      #(second), default 'nv'
 
         self.button_default_text = "Request"
         self.button_spinner_frames = ["Request |", "Request /", "Request -", "Request \\"]
         self.button_spinner_index = 0
         self.button_is_spinning = False
         self.button_spin_job = None
+
+        self.is_internet_connected = False
+        self.current_times_error = 0
+        self.time_login = None
+        self.wait = 0.0
 
         self.key_internet_check_interval = "internet_check_interval"
         self.key_login_retry_duration = "login_retry_duration"
@@ -127,41 +132,17 @@ class MyApp:
         self.ip_label.grid(row=0, column=0, padx=7,pady=5, sticky="w")
         
 
-        self.interval_menu = ctk.CTkOptionMenu(
-            self.control_frame,
-            width = 71,
-            values = ["1s", "2s", "3s", "5s","7s","10s","15s"],
-            variable = ctk.StringVar(value = str(self.internet_check_interval) + 's'),
-            anchor = "center",
-            command = self.change_internet_check_interval,
-            font = ("JetBrains Mono", 14,"bold"),
-            dropdown_text_color = "#ffffff",
-            dropdown_fg_color = "#004275",
-            dropdown_hover_color = "#002642",
-            text_info= "Interval time",
-            dropdown_font= ("JetBrains Mono", 11,"bold"),
-            fg_text_info_color = "#203a4f",
+        self.internet_frame = ctk.CTkFrame(self.control_frame, width=300, height=10, fg_color = "#2d7cbb")
+        self.internet_frame.grid(row=1, column=0, padx=7, pady=4, sticky="w")
+        self.internet_label = ctk.CTkLabel(
+            self.internet_frame,
+            width=131, height=13,
+            font=("JetBrains Mono", 14, "bold"),
+            anchor="center",
+            text="Internet: ...",
+            text_color="#ffffff"
         )
-        self.interval_menu.grid(row=1, column=0, padx=7,pady=4, sticky="w")
-        
-        self.interval_relogin_menu = ctk.CTkOptionMenu(
-            self.control_frame,
-            width = 71,
-            values = ["1m", "5m", "nv"],
-            variable = ctk.StringVar(value = 'nv' if self.login_retry_duration == self.never_time 
-                                     else str(int(self.login_retry_duration / 60)) + 'm'),
-            anchor = "center",
-            command = self.change_login_retry_duration,
-            font = ("JetBrains Mono", 14,"bold"),
-            dropdown_text_color = "#ffffff",
-            dropdown_fg_color = "#004275",
-            dropdown_hover_color = "#002642",
-            text_info= "Relogin time",
-            dropdown_font= ("JetBrains Mono", 11,"bold"),
-            fg_text_info_color = "#203a4f",
-            
-        )
-        self.interval_relogin_menu.grid(row=1, column=0, padx=(0, 7), sticky="e")
+        self.internet_label.grid(row=0, column=0, padx=7, pady=5, sticky="w")
         
 
         self.button = ctk.CTkButton(
@@ -169,7 +150,8 @@ class MyApp:
             width = 146,
             text=self.button_default_text,
             command=self.login_by_button, 
-            font=("JetBrains Mono", 14,"bold")
+            font=("JetBrains Mono", 14,"bold"),
+            fg_color = "#2d7cbb"
         )
         self.button.grid(row=2, column=0, padx=7,pady=7, sticky="w")
         
@@ -178,6 +160,7 @@ class MyApp:
     def login_by_button(self):
         self.status_label.configure(text="Logging in......", text_color = "white")
         self.info_label.configure(text="")
+        self.update_internet_status(None)
         self.start_button_spinner()
         Thread(target=self.login_by_button_worker, daemon=True).start()
         self.current_times_error = 0
@@ -228,8 +211,24 @@ class MyApp:
         self.status_label.configure(text="Status: Running", text_color = "green")
         elapsed = int((datetime.datetime.now() - self.time_login).total_seconds())
         self.info_label.configure(text = f"TimeLogin: {self.time_login.strftime('%H:%M')}\n"f"TimeUsage: {elapsed//60:02d}:{elapsed%60:02d}")
-    
+
+    def update_internet_status(self, is_connected):
+        def _update():
+            if is_connected is True:
+                self.internet_label.configure(text="Internet: YES", text_color="#00ff88")
+            elif is_connected is False:
+                self.internet_label.configure(text="Internet: NO", text_color="#ff6b6b")
+            else:
+                self.internet_label.configure(text="Internet: ...", text_color="#dce4e4")
+
+        try:
+            self.root.after(0, _update)
+        except Exception:
+            pass
+
     def error_login_handle(self):
+        self.is_internet_connected = False
+        self.update_internet_status(False)
         if self.current_times_error >= int(self.login_retry_duration/self.internet_check_interval):
             self.running = False
             self.status_label.configure(text="Status: Pause", text_color = "yellow")
@@ -265,9 +264,12 @@ class MyApp:
                 
             if self.check_internet():
                 self.is_internet_connected = True
+                self.update_internet_status(True)
                 self.wait = self.internet_check_interval
                 return
                 
+            self.is_internet_connected = False
+            self.update_internet_status(False)
             self.status_label.configure(text="Status: Error", text_color = "red")
             self.info_label.configure(text="Login success but\nno internet!\nRe-login")
             
@@ -301,10 +303,13 @@ class MyApp:
 
             # check internet
             if not self.check_internet():
+                self.is_internet_connected = False
+                self.update_internet_status(False)
                 self.login_success_but_no_internet_handle(is_login_success)
                 continue
             
             self.is_internet_connected = True
+            self.update_internet_status(True)
             
             self.wait = self.internet_check_interval
         
@@ -322,6 +327,7 @@ class MyApp:
             is_login_success = False
             if not self.check_internet():
                 self.is_internet_connected = False
+                self.update_internet_status(False)
                 
                 if self.login(False):
                     # successful login
@@ -336,12 +342,15 @@ class MyApp:
 
                 # check internet after login
                 if not self.check_internet():
+                    self.is_internet_connected = False
+                    self.update_internet_status(False)
                     self.login_success_but_no_internet_handle(is_login_success)
                     continue
                 
                 self.current_times_error = 0
 
             self.is_internet_connected = True
+            self.update_internet_status(True)
             if self.time_login is None:
                 self.time_login = datetime.datetime.now()
             
@@ -601,6 +610,7 @@ class MyApp:
         self.refresh_tray_menu()
         self.root.after(0, lambda: self.status_label.configure(text="Status: Pause", text_color="yellow"))
         self.root.after(0, lambda: self.info_label.configure(text=f"TimePause: {time.strftime('%H:%M')}"))
+        self.update_internet_status(None)
 
     def resume_app(self):
         self.running = True
@@ -609,6 +619,7 @@ class MyApp:
         self.wait = 0
         self.start_run_thread()
         self.refresh_tray_menu()
+        self.update_internet_status(None)
         self.root.after(0, lambda: self.status_label.configure(text="Status: Running", text_color="green"))
         self.root.after(0, lambda: self.info_label.configure(text="Resuming..."))
 
@@ -647,39 +658,10 @@ class MyApp:
             pass
         
 
-    def change_internet_check_interval(self, value):
-        value = int(value[:-1]) #omit the 's' symbol
-        if self.internet_check_interval == value:
-            return
-        
-        self.internet_check_interval = value
-        self.time_login = None
-        self.current_times_error = 0
-        self.wait = 0
-        self.save_winreg_variables(self.key_internet_check_interval, value)
-        
-    def change_login_retry_duration(self, value):
-        if value == 'nv':
-            value = self.never_time
-        else:
-            value = 60 * int(value[:-1]) #omit the 'm' symbol
-        if self.login_retry_duration == value:
-            return
-        self.login_retry_duration = value
-        self.time_login = None
-        self.current_times_error = 0
-        self.wait = 0
-        self.save_winreg_variables(self.key_login_retry_duration, value)
-
     def load_data(self):
-        internet_check_interval = self.get_winreg_variables(self.key_internet_check_interval)
-        if internet_check_interval != None:
-            self.internet_check_interval = int(internet_check_interval)
-            
-        login_retry_duration = self.get_winreg_variables(self.key_login_retry_duration)
-        if login_retry_duration != None:
-            self.login_retry_duration = int(login_retry_duration)
-            
+        # Mặc định: internet_check_interval = 2s, login_retry_duration = never_time (nv)
+        pass
+
     def save_winreg_variables(self, name, value):
         key = winreg.CreateKey(winreg.HKEY_CURRENT_USER, "Software\\Request")
         if type(value) is str:
@@ -753,14 +735,3 @@ if __name__ == "__main__":
 
 
     #python -m PyInstaller source_request.spec
-
-###custom for dropdown_menu.py:105###
-# if self._text_info != None:
-#     self.add_command(
-#         label=self._text_info.ljust(self._min_character_width),
-#         command=None,
-#         foreground=self._apply_appearance_mode(self._text_color),
-#         background=self._apply_appearance_mode(self._fg_text_info_color),
-#         activebackground=self._apply_appearance_mode(self._fg_text_info_color),
-#         activeforeground=self._apply_appearance_mode(self._text_color)
-#     )
